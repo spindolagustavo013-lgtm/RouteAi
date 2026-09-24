@@ -1,88 +1,70 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#0b1220">
-  <title>RouteAI — Your intelligent route companion</title>
-  <link rel="stylesheet" href="styles.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#07101d">
+<title>RouteAI — Your intelligent route companion</title>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <main class="app-shell">
-    <header class="topbar">
-      <div class="brand"><span class="brand-mark">R</span><span>Route<span>AI</span></span></div>
-      <button class="icon-btn" aria-label="Settings">⚙</button>
-    </header>
+<main class="app-shell">
+<header class="topbar">
+  <div class="brand"><span class="brand-mark">R</span><span>Route<span>AI</span></span></div>
+  <button class="icon-btn" aria-label="Settings">⚙</button>
+</header>
 
-    <section class="hero">
-      <p class="eyebrow">AI-POWERED NAVIGATION</p>
-      <h1>Where do you want to go?</h1>
-      <p class="sub">Tell RouteAI what you need. We'll turn it into a simple route.</p>
+<section class="hero">
+  <p class="eyebrow">AI-POWERED NAVIGATION</p>
+  <h1>Where do you want to go?</h1>
+  <p class="sub">Tell RouteAI where you're going and what you want to do on the way.</p>
 
-      <div class="command-card">
-        <textarea id="request" rows="3"
-          placeholder="Try: “I’m going to Dublin tomorrow at 9 AM and I want somewhere nice for lunch on the way.”"></textarea>
-        <div class="command-bottom">
-          <button id="micBtn" class="round-btn" title="Voice input">🎙️</button>
-          <button id="planBtn" class="plan-btn">Plan my route <span>→</span></button>
-        </div>
-      </div>
+  <div class="command-card">
+    <textarea id="request" rows="3" placeholder="“I'm going to Dublin tomorrow at 9 AM. I want a coffee and lunch on the way.”"></textarea>
+    <div class="command-bottom">
+      <button id="micBtn" class="round-btn" title="Voice input" aria-label="Voice input">🎙️</button>
+      <button id="planBtn" class="plan-btn">Plan my route <span>→</span></button>
+    </div>
+    <div id="voiceStatus" class="voice-status"></div>
+  </div>
 
-      <div class="chips">
-        <button class="chip" data-prompt="I need to go to Dublin tomorrow at 9 AM.">📍 Dublin tomorrow</button>
-        <button class="chip" data-prompt="Find somewhere to eat near me.">🍽️ Find food</button>
-        <button class="chip" data-prompt="I need a coffee stop on my route to Dublin.">☕ Coffee stop</button>
-      </div>
-    </section>
+  <div class="chips">
+    <button class="chip" data-prompt="I'm going to Dublin tomorrow at 9 AM. I want a coffee and lunch on the way.">📍 Dublin + coffee + lunch</button>
+    <button class="chip" data-prompt="I need to go to Dublin and stop for lunch on the way.">🍽️ Lunch on the way</button>
+    <button class="chip" data-prompt="I need a coffee stop on my route to Dublin.">☕ Coffee stop</button>
+  </div>
+</section>
 
-    <section id="result" class="result hidden">
-      <div class="result-head">
-        <div>
-          <p class="eyebrow">YOUR PLAN</p>
-          <h2 id="routeTitle">Route ready</h2>
-        </div>
-        <span class="status">AI planned</span>
-      </div>
+<section id="result" class="result hidden">
+  <div class="result-head">
+    <div><p class="eyebrow">YOUR PLAN</p><h2 id="routeTitle">Route ready</h2></div>
+    <span class="status" id="status">Planning…</span>
+  </div>
 
-      <div class="route-card">
-        <div class="route-line">
-          <div class="dot start"></div>
-          <div class="line"></div>
-          <div class="dot end"></div>
-        </div>
-        <div class="route-info">
-          <div><strong id="from">Your location</strong><span>Start</span></div>
-          <div><strong id="to">Dublin</strong><span id="time">Approx. route</span></div>
-        </div>
-      </div>
+  <div id="routeCard" class="route-card">
+    <div class="route-line" id="routeLine"></div>
+    <div class="route-info" id="routeInfo"></div>
+  </div>
 
-      <div id="stopCard" class="stop-card hidden">
-        <div class="stop-icon">🍽️</div>
-        <div class="stop-copy">
-          <span class="mini">RECOMMENDED STOP</span>
-          <strong id="stopName">Lunch stop</strong>
-          <span id="stopText">A convenient place to stop on your route.</span>
-        </div>
-      </div>
+  <div id="errorBox" class="error hidden"></div>
 
-      <div class="actions">
-        <a id="mapsBtn" class="primary-action" href="#" target="_blank" rel="noopener">Open in Maps →</a>
-        <button id="newBtn" class="secondary-action">New route</button>
-      </div>
-      <p class="demo-note">Prototype mode: live traffic, places and AI responses will be connected in the next build.</p>
-    </section>
+  <div class="actions">
+    <a id="mapsBtn" class="primary-action disabled" href="#" target="_blank" rel="noopener">Open full route in Maps →</a>
+    <button id="newBtn" class="secondary-action">New route</button>
+  </div>
+  <p class="demo-note">Prototype uses open map/geocoding services to demonstrate real stops. Live traffic, richer place ratings and production AI will be added in the next build.</p>
+</section>
 
-    <section class="how">
-      <p class="eyebrow">HOW IT WORKS</p>
-      <div class="how-grid">
-        <div><b>01</b><h3>Just say it</h3><p>Type or speak naturally.</p></div>
-        <div><b>02</b><h3>RouteAI plans</h3><p>It understands your stops and timing.</p></div>
-        <div><b>03</b><h3>Start driving</h3><p>Open your preferred maps app.</p></div>
-      </div>
-    </section>
-
-    <footer>RouteAI · Your intelligent route companion</footer>
-  </main>
-  <script src="app.js"></script>
+<section class="how">
+  <p class="eyebrow">HOW IT WORKS</p>
+  <div class="how-grid">
+    <div><b>01</b><h3>Just say it</h3><p>Type or speak naturally.</p></div>
+    <div><b>02</b><h3>RouteAI finds stops</h3><p>It looks for useful places along your route.</p></div>
+    <div><b>03</b><h3>Start driving</h3><p>Open the complete route in Maps.</p></div>
+  </div>
+</section>
+<footer>RouteAI · Your intelligent route companion</footer>
+</main>
+<script src="app.js"></script>
 </body>
 </html>
