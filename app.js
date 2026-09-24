@@ -171,63 +171,73 @@ function haversine(a, b) {
 }
 
 async function findPlace(point, type) {
-  const queries = type === "coffee"
+  // Search several Overpass servers, but never allow the page to hang.
+  const selectors = type === "coffee"
     ? [
-        '["amenity"="cafe"]',
-        '["amenity"="coffee_shop"]'
+        `node[amenity=cafe](around:10000,${point.lat},${point.lon});`,
+        `way[amenity=cafe](around:10000,${point.lat},${point.lon});`
       ]
     : [
-        '["amenity"="restaurant"]',
-        '["amenity"="fast_food"]',
-        '["amenity"="cafe"]'
+        `node[amenity=restaurant](around:10000,${point.lat},${point.lon});`,
+        `way[amenity=restaurant](around:10000,${point.lat},${point.lon});`,
+        `node[amenity=fast_food](around:10000,${point.lat},${point.lon});`,
+        `way[amenity=fast_food](around:10000,${point.lat},${point.lon});`
       ];
 
-  const servers = [
+  const query = `[out:json][timeout:8];(${selectors.join("")});out center tags;`;
+
+  const endpoints = [
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter"
   ];
 
   let lastError = null;
 
-  for (const server of servers) {
-    for (const tagFilter of queries) {
-      const query = `[out:json][timeout:20];(node${tagFilter}(around:10000,${point.lat},${point.lon});way${tagFilter}(around:10000,${point.lat},${point.lon}););out center tags;`;
-      const url = `${server}?data=${encodeURIComponent(query)}`;
+  for (const endpoint of endpoints) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 9000);
 
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 15000);
-        const response = await fetch(url, {
-          method: "GET",
-          headers: { Accept: "application/json" },
-          cache: "no-store",
-          signal: controller.signal
-        });
-        clearTimeout(timeout);
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain;charset=UTF-8",
+          "Accept": "application/json"
+        },
+        body: query,
+        signal: controller.signal,
+        cache: "no-store"
+      });
 
-        if (!response.ok) throw new Error(`Places server returned HTTP ${response.status}.`);
-
-        const data = await response.json();
-        const places = (data.elements || [])
-          .map(element => ({
-            lat: element.lat ?? element.center?.lat,
-            lon: element.lon ?? element.center?.lon,
-            name: element.tags?.name
-          }))
-          .filter(place => Number.isFinite(place.lat) && Number.isFinite(place.lon) && place.name);
-
-        if (places.length) {
-          places.sort((a, b) => haversine(point, a) - haversine(point, b));
-          return places[0];
-        }
-      } catch (error) {
-        lastError = error;
+      if (!response.ok) {
+        throw new Error(`Places server returned HTTP ${response.status}.`);
       }
+
+      const data = await response.json();
+      const places = data.elements
+        .map(element => ({
+          lat: element.lat ?? element.center?.lat,
+          lon: element.lon ?? element.center?.lon,
+          name: element.tags?.name,
+          type
+        }))
+        .filter(place =>
+          Number.isFinite(place.lat) &&
+          Number.isFinite(place.lon) &&
+          place.name
+        );
+
+      places.sort((a, b) => haversine(point, a) - haversine(point, b));
+
+      if (places[0]) return places[0];
+    } catch (error) {
+      lastError = error;
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
-  // A missing place is not a fatal route error. The caller can continue.
-  console.warn(`Could not find a ${type} stop near the route.`, lastError);
+  console.warn(`${type} place search failed:`, lastError);
   return null;
 }
 
@@ -303,6 +313,7 @@ async function planRoute() {
     const stops = [];
 
     if (intent.coffee) {
+      statusEl.textContent = "Finding a coffee stop…";
       try {
         const coffee = await findPlace(samplePoint(baseRoute, 0.32), "coffee");
         if (coffee) stops.push({ ...coffee, kind: "coffee" });
@@ -312,6 +323,7 @@ async function planRoute() {
     }
 
     if (intent.lunch) {
+      statusEl.textContent = "Finding a lunch stop…";
       try {
         const lunch = await findPlace(
           samplePoint(baseRoute, intent.coffee ? 0.58 : 0.50),
@@ -331,6 +343,7 @@ async function planRoute() {
     }
 
     const points = [start, ...stops, destination];
+    statusEl.textContent = "Building your final route…";
     await route(points);
     renderPlan(start, destination, stops);
 
