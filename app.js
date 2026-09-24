@@ -171,27 +171,64 @@ function haversine(a, b) {
 }
 
 async function findPlace(point, type) {
-  const tag = type === "coffee" ? "amenity=cafe" : "amenity=restaurant";
-  const query = `[out:json][timeout:15];(node[${tag}](around:7000,${point.lat},${point.lon});way[${tag}](around:7000,${point.lat},${point.lon}););out center tags;`;
+  const queries = type === "coffee"
+    ? [
+        '["amenity"="cafe"]',
+        '["amenity"="coffee_shop"]'
+      ]
+    : [
+        '["amenity"="restaurant"]',
+        '["amenity"="fast_food"]',
+        '["amenity"="cafe"]'
+      ];
 
-  const response = await fetch(OVERPASS, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=UTF-8" },
-    body: query
-  });
-  if (!response.ok) throw new Error("The places search service is unavailable right now.");
+  const servers = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter"
+  ];
 
-  const data = await response.json();
-  const places = data.elements
-    .map(element => ({
-      lat: element.lat ?? element.center?.lat,
-      lon: element.lon ?? element.center?.lon,
-      name: element.tags?.name
-    }))
-    .filter(place => Number.isFinite(place.lat) && Number.isFinite(place.lon) && place.name);
+  let lastError = null;
 
-  places.sort((a, b) => haversine(point, a) - haversine(point, b));
-  return places[0] || null;
+  for (const server of servers) {
+    for (const tagFilter of queries) {
+      const query = `[out:json][timeout:20];(node${tagFilter}(around:10000,${point.lat},${point.lon});way${tagFilter}(around:10000,${point.lat},${point.lon}););out center tags;`;
+      const url = `${server}?data=${encodeURIComponent(query)}`;
+
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        const response = await fetch(url, {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          cache: "no-store",
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+
+        if (!response.ok) throw new Error(`Places server returned HTTP ${response.status}.`);
+
+        const data = await response.json();
+        const places = (data.elements || [])
+          .map(element => ({
+            lat: element.lat ?? element.center?.lat,
+            lon: element.lon ?? element.center?.lon,
+            name: element.tags?.name
+          }))
+          .filter(place => Number.isFinite(place.lat) && Number.isFinite(place.lon) && place.name);
+
+        if (places.length) {
+          places.sort((a, b) => haversine(point, a) - haversine(point, b));
+          return places[0];
+        }
+      } catch (error) {
+        lastError = error;
+      }
+    }
+  }
+
+  // A missing place is not a fatal route error. The caller can continue.
+  console.warn(`Could not find a ${type} stop near the route.`, lastError);
+  return null;
 }
 
 function samplePoint(routeData, fraction) {
