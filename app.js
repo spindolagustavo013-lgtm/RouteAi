@@ -13,7 +13,10 @@ const newBtn = document.getElementById("newBtn");
 
 const NOM = "https://nominatim.openstreetmap.org/search";
 const OVERPASS = "https://overpass-api.de/api/interpreter";
-const OSRM = "https://router.project-osrm.org/route/v1/driving";
+const ROUTING_ENDPOINTS = [
+  "https://routing.openstreetmap.de/routed-car/route/v1/driving",
+  "https://router.project-osrm.org/route/v1/driving"
+];
 
 // Quick examples
 for (const chip of document.querySelectorAll(".chip")) {
@@ -110,14 +113,52 @@ function getCurrentPosition() {
 
 async function route(coords) {
   const coordinates = coords.map(point => `${point.lon},${point.lat}`).join(";");
-  const response = await fetch(`${OSRM}/${coordinates}?overview=full&geometries=geojson`);
-  if (!response.ok) throw new Error("The routing service is unavailable right now.");
+  const query = "?overview=full&geometries=geojson";
+  let lastError = null;
 
-  const data = await response.json();
-  if (data.code !== "Ok" || !data.routes?.[0]) {
-    throw new Error("I couldn't calculate that route.");
+  // Try two independent OSRM-compatible public routing servers.
+  // If one is temporarily unavailable on the phone/browser, the second
+  // server can still calculate the route.
+  for (const endpoint of ROUTING_ENDPOINTS) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+
+    try {
+      const response = await fetch(
+        `${endpoint}/${coordinates}${query}`,
+        {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+          cache: "no-store"
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Routing server returned HTTP ${response.status}.`);
+      }
+
+      const data = await response.json();
+
+      if (data.code === "Ok" && data.routes?.[0]) {
+        return data.routes[0];
+      }
+
+      throw new Error(data.message || "No drivable route was found.");
+    } catch (error) {
+      lastError = error;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
-  return data.routes[0];
+
+  if (lastError?.name === "AbortError") {
+    throw new Error("The routing service took too long to respond. Please try again.");
+  }
+
+  throw new Error(
+    "The route service could not be reached. Please try again in a few seconds."
+  );
 }
 
 function haversine(a, b) {
@@ -225,14 +266,25 @@ async function planRoute() {
     const stops = [];
 
     if (intent.coffee) {
-      const coffee = await findPlace(samplePoint(baseRoute, 0.32), "coffee");
-      if (coffee) stops.push({ ...coffee, kind: "coffee" });
+      try {
+        const coffee = await findPlace(samplePoint(baseRoute, 0.32), "coffee");
+        if (coffee) stops.push({ ...coffee, kind: "coffee" });
+      } catch (error) {
+        console.warn("Coffee stop lookup failed:", error);
+      }
     }
 
     if (intent.lunch) {
-      const lunch = await findPlace(samplePoint(baseRoute, intent.coffee ? 0.58 : 0.50), "lunch");
-      if (lunch && (!stops.length || haversine(lunch, stops[0]) > 1500)) {
-        stops.push({ ...lunch, kind: "lunch" });
+      try {
+        const lunch = await findPlace(
+          samplePoint(baseRoute, intent.coffee ? 0.58 : 0.50),
+          "lunch"
+        );
+        if (lunch && (!stops.length || haversine(lunch, stops[0]) > 1500)) {
+          stops.push({ ...lunch, kind: "lunch" });
+        }
+      } catch (error) {
+        console.warn("Lunch stop lookup failed:", error);
       }
     }
 
